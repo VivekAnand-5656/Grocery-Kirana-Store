@@ -93,3 +93,55 @@ async def all_products():
         custom_encoder={ObjectId:str}
     )
 
+# ========= Search Products ==========
+async def serchProducts(search:str):
+    products = await productCollection.find(
+        {
+            "productname":{
+                "$regex":search,
+                "$options":"i"
+            }
+        }
+    ).to_list(length=None)
+    if not products:
+        raise HTTPException(404,detail="Product not found")
+    return jsonable_encoder(
+        products,
+        custom_encoder={ObjectId:str}
+    )
+# =============== Filter Products =============
+async def filterProducts(search:str):
+    products = await productCollection.find(
+        {
+            "$text":{
+                "$search":search
+            }
+        }
+    ).to_list(length=None)
+
+    if not products:
+        raise HTTPException(404,detail="Empty Products")
+    
+    return jsonable_encoder(
+        products,
+        custom_encoder={ObjectId:str}
+    )
+
+# =============== Filter by Price ==========
+async def filterByPrice(gtPrice:int,ltPrice:int):
+    products = await productCollection.find(
+        {
+            "price":{
+                "$gte":gtPrice,
+                "$lte":ltPrice,
+            }
+        }
+    ).sort({"price":1}).to_list(length=None)
+
+    if not products:
+        raise HTTPException(404,detail="Empty Products")
+    
+    return jsonable_encoder(
+        products,
+        custom_encoder={ObjectId:str}
+    )

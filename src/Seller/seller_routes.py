@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File,UploadFile, Form
 from src.Seller import seller_controller 
 from src.Dependencies.check import isLogin
+from src.Seller.seller_schema import UpdateStatus
 
 seller_router = APIRouter(prefix="/sellers",tags=["Seller"])
 
@@ -68,7 +69,32 @@ async def productUpdate(
 async def availableUpdate(productId:str,isAvailable:bool = Form(...),user=Depends(isLogin)):
     return await seller_controller.updateIsAvailable(productId,isAvailable,user)
 
+# -------------- Status Update -----------
+@seller_router.put("/statusupdate/{orderId}")
+async def statusUpdate(orderId:str,data:UpdateStatus,user=Depends(isLogin)):
+    return await seller_controller.updateStatus(orderId,data,user)
+
 # -------------- Delete Product -------------
 @seller_router.delete("/deleteProduct/{productId}")
 async def deleteProduct(productId:str,user=Depends(isLogin)):
     return await seller_controller.deleteProduct(productId,user)
+
+# ----------- My Orders -------------
+@seller_router.get("/myorders")
+async def myorders(user=Depends(isLogin)):
+    return await seller_controller.myallorders(user)
+
+# ----------- Order By Status ----------
+@seller_router.get("/orderbystatus/{status}")
+async def statusByOrder(status:str,user=Depends(isLogin)):
+    return await seller_controller.orderByStatus(status,user)
+
+# ----------- Total Orders ----------
+@seller_router.get("/totalorder")
+async def totalorders(user=Depends(isLogin)):
+    return await seller_controller.totalOrders(user)
+
+# ----------- Total Earnings ----------
+@seller_router.get("/totalearning")
+async def totalEarning(user=Depends(isLogin)):
+    return await seller_controller.myEarnings(user)

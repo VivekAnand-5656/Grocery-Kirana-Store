@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from src.Config.db import productCollection,sellersCollection,customerCollection
+from src.Config.db import productCollection,sellersCollection,customerCollection,ordersCollection
 from src.Customer.customer_schema import UpdateProfile
 from bson import ObjectId
 from datetime import datetime
@@ -70,18 +70,42 @@ async def buyProduct(productId:str,quantity:int | None,user=None):
     if quantity is None:
         quantity = 1
     totalprice = quantity * product["discount_price"]
+    order = {
+        "customer_id": customer["_id"],
+        "seller_id": ObjectId(product["seller_id"]),
+        "items": [{
+            "product_id": product["_id"],
+            "productname": product["productname"],
+            "discount_price": product["discount_price"],
+            "quantity": quantity,
+            "status": "Pending"
+        }],
+        "totalAmount": totalprice,
+        "status": "Pending"
+    }
+    result = await ordersCollection.insert_one(order)
+ 
+
+    # Add order id into customer myOrders
     await customerCollection.update_one(
-        {"_id":customer["_id"]},
+        {"_id": customer["_id"]},
         {
-            "$push":{
-                "myorders":{
-                    "product_id":product["_id"],
-                    "totalPrice":totalprice,
-                    "quantity":quantity
-                }
+            "$push": {
+                "myorders": result.inserted_id
             }
         }
     )
+
+    # Add order id into seller myOrders
+    await sellersCollection.update_one(
+        {"_id":ObjectId(product["seller_id"])},
+        {
+            "$push": {
+                "myorders": result.inserted_id
+            }
+        }
+    )
+ 
     return jsonable_encoder(
         {
             "msg":"Product Buy Successfully"
@@ -99,35 +123,11 @@ async def myorders(user):
     if not customer:
         raise HTTPException(404,detail="Customer not found")
     
-    orders = await customerCollection.aggregate([
+    orders = await ordersCollection.find(
         {
-            "$match":{
-                "_id":customer["_id"]
-            }
-        },
-        {
-            "$unwind":"$myorders"
-        },
-        {
-            "$lookup":{
-                "from":"products",
-                "localField":"myorders.product_id",
-                "foreignField":"_id",
-                "as":"allOrders"
-            }
-        },
-        {
-            "$unwind":"$allOrders"
-        },
-        {
-            "$project":{
-                "_id":0,
-                "quantity":"$myorders.quantity",
-                "totalPrice":"$myorders.totalPrice",
-                "allOrders":1
-            }
+            "customer_id":customer["_id"]
         }
-    ]).to_list(length=None)
+    ).to_list(length=None)
     if not orders:
         raise HTTPException(404,detail="Empty Orders")
     return jsonable_encoder(
@@ -266,7 +266,11 @@ async def addtocart(productId:str,user):
         {"_id":customer["_id"]},
         {
             "$addToSet":{
-                "carts":ObjectId(productId)
+                "carts":{
+                    "_id":ObjectId(),
+                    "product_id":ObjectId(productId),
+                    "quantity":1
+                }
             }
         }
     )
@@ -300,7 +304,7 @@ async def mycarts(user):
         {
             "$lookup":{
                 "from":"products",
-                "localField":"carts",
+                "localField":"carts.product_id",
                 "foreignField":"_id",
                 "as":"allcarts"
             }
@@ -311,7 +315,9 @@ async def mycarts(user):
         {
             "$project":{
                 "_id":0,
-                "allcarts":1
+                "allcarts":1 ,
+                "_id":"$carts._id",
+                "quantity":"$carts.quantity"
             }
         }
     ]).to_list(length=None)
@@ -320,6 +326,74 @@ async def mycarts(user):
 
     return jsonable_encoder(
         carts,
+        custom_encoder={ObjectId:str}
+    )
+
+# ================ Update Cart Quantity By Cart id =============
+async def increaseQuantity(productId:str,user):
+    if user["role"] != "customer":
+        raise HTTPException(403,detail="You are not authorized")
+    customer = await customerCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not customer:
+        raise HTTPException(404,detail="Customer not found")
+
+    await customerCollection.update_one(
+        {
+            "_id":ObjectId(user["_id"]),
+            "carts.product_id":ObjectId(productId)
+        },
+        {
+            "$inc":{
+                "carts.$.quantity":1
+            }
+        }
+    )       
+    return jsonable_encoder(
+        {
+            "msg":"Increase Cart Quantity"
+        },
+        custom_encoder={ObjectId:str}
+    )
+# ================ Update Minus Cart Quantity By Cart id =============
+async def decreaseQuantity(productId:str,user):
+    if user["role"] != "customer":
+        raise HTTPException(403,detail="You are not authorized")
+    customer = await customerCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not customer:
+        raise HTTPException(404,detail="Customer not found")
+
+    await customerCollection.update_one(
+        {
+            "_id":ObjectId(user["_id"]),
+            "carts.product_id":ObjectId(productId)
+        },
+        {
+            "$inc":{
+                "carts.$.quantity":-1
+            }
+        }
+    )
+    await customerCollection.update_one(
+        {
+            "_id": ObjectId(user["_id"])
+        },
+        {
+            "$pull": {
+                "carts": {
+                    "product_id": ObjectId(productId),
+                    "quantity": 0
+                }
+            }
+        }
+    )
+    return jsonable_encoder(
+        {
+            "msg":"Decrease Cart Quantity"
+        },
         custom_encoder={ObjectId:str}
     )
 
@@ -345,7 +419,7 @@ async def cartTotal(user):
         {
             "$lookup":{
                 "from":"products",
-                "localField":"carts",
+                "localField":"carts.product_id",
                 "foreignField":"_id",
                 "as":"allcarts"
             }
@@ -356,7 +430,8 @@ async def cartTotal(user):
         {
             "$project":{
                 "_id":0,
-                "allcarts":1
+                "allcarts":1,
+                "quantity":"$carts.quantity"
             }
         }
     ]).to_list(length=None)
@@ -364,7 +439,7 @@ async def cartTotal(user):
         raise HTTPException(404,detail="Empty Carts")
     totalCartPrice = 0
     for cart in carts:
-        totalCartPrice += cart["allcarts"]["discount_price"]
+        totalCartPrice += (cart["allcarts"]["discount_price"] * cart["quantity"])
     return jsonable_encoder(
         {"total":totalCartPrice},
         custom_encoder={ObjectId:str}
@@ -405,7 +480,8 @@ async def removeCart(productId:str,user):
         custom_encoder={ObjectId:str}
     )
 
-# ============= Order By Cart ============
+# # ============= Order By Cart ============
+ 
 async def placeOrder(user):
     if user["role"] != "customer":
         raise HTTPException(403,detail="You are not authorized")
@@ -417,23 +493,82 @@ async def placeOrder(user):
     cart = customer.get("carts",[])
     if not cart:
         raise HTTPException(400,detail="Empty Cart")
-    await customerCollection.update_one(
-        {"_id":customer["_id"]},
-        {
-            "$push":{
-                "myorders":{
-                    "$each":cart
+    
+    seller_orders={}
+
+    for item in customer["carts"]:
+        product = await productCollection.find_one(
+            {
+                "_id":ObjectId(item["product_id"])
+            }
+        )
+        if not product:
+            continue
+        seller_id = ObjectId(product["seller_id"])
+        if seller_id not in seller_orders:
+            seller_orders[seller_id] = []
+        seller_orders[seller_id].append({
+            "product_id": product["_id"],
+            "productname": product["productname"],
+            "discount_price": product["discount_price"],
+            "quantity": item["quantity"],
+            "status": "Pending"
+        })
+
+    create_orders = []
+    for seller_id, items in seller_orders.items():
+        
+        total_amount = sum(
+            item["discount_price"] * float(item["quantity"])
+            for item in items
+        )
+
+        order = {
+            "customer_id": customer["_id"],
+            "seller_id": ObjectId(seller_id),
+            "items": items,
+            "totalAmount": total_amount,
+            "status": "Pending"
+        }
+
+        result = await ordersCollection.insert_one(order)
+
+        create_orders.append(str(result.inserted_id))
+
+        # Add order id into customer myOrders
+        await customerCollection.update_one(
+            {"_id": customer["_id"]},
+            {
+                "$push": {
+                    "myorders": result.inserted_id
                 }
-            },
-            "$set":{
-                "carts":[]
+            }
+        )
+
+        # Add order id into seller myOrders
+        await sellersCollection.update_one(
+            {"_id": ObjectId(seller_id)},
+            {
+                "$push": {
+                    "myorders": result.inserted_id
+                }
+            }
+        )
+
+    # Clear cart after successful order
+    await customerCollection.update_one(
+        {"_id": customer["_id"]},
+        {
+            "$set": {
+                "carts": []
             }
         }
     )
 
     return jsonable_encoder(
         {
-            "msg":"Order Placed Successfully"
+            "msg":"Order Placed Successfully",
+            "orders":create_orders
         },
         custom_encoder={ObjectId:str}
     )

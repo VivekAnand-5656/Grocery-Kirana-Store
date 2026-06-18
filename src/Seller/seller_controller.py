@@ -1,6 +1,8 @@
 from fastapi import HTTPException, UploadFile
-from src.Config.db import sellersCollection ,productCollection
+from src.Config.db import sellersCollection ,productCollection,ordersCollection,customerCollection
 from src.Public.publicSchema import CreateUser,LoginUser
+from src.Seller.seller_schema import UpdateStatus
+from src.Enums.enum import OrderStatus
 from bson import ObjectId
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
@@ -306,5 +308,134 @@ async def deleteProduct(productId:str,user):
         {
             "msg":"Product Deleted"
         },
+        custom_encoder={ObjectId:str}
+    )
+# =============== Get All Orderse ============
+async def myallorders(user):
+    if user["role"] != "seller":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    seller = await sellersCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not seller:
+        raise HTTPException(404,detail="Seller not found")
+    orders = await ordersCollection.find(
+        {
+            "seller_id":seller["_id"]
+        }
+    ).to_list(length=None)
+
+    if not orders:
+        raise HTTPException(404,detail="Empty Orders")
+    return jsonable_encoder(
+        orders,
+        custom_encoder={ObjectId:str}
+    )
+
+# =================== Update Order Status ===========
+async def updateStatus(orderId:str,data:UpdateStatus,user):
+    if user["role"] != "seller":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    seller = await sellersCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not seller:
+        raise HTTPException(404,detail="Seller not found")
+    order = await ordersCollection.find_one(
+        {"_id":ObjectId(orderId)}
+    )
+    if not order:
+        raise HTTPException(404,detail="Empty Order")
+    await ordersCollection.update_one(
+        {"_id":order["_id"]},
+        {
+            "$set":{
+                "status":data.status,
+                "items.$[].status": data.status
+            }
+        }
+    )
+    return jsonable_encoder(
+        {
+            "msg":"Status Updated"
+        },
+        custom_encoder={ObjectId:str}
+    )
+# ========== Get Orders By Status ==========
+async def orderByStatus(status:str,user):
+    if user["role"] != "seller":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    seller = await sellersCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not seller:
+        raise HTTPException(404,detail="Seller not found")
+    
+    orders = await ordersCollection.find(
+        
+        {
+            "seller_id":seller["_id"],
+            "status":{
+                "$regex":status,
+                "$options":"i"
+            }
+        }
+    ).to_list(length=None)
+
+    if not orders:
+        raise HTTPException(404,detail="Empty Orders")
+    return jsonable_encoder(
+        orders,
+        custom_encoder={ObjectId:str}
+    )
+
+# ============== Total Orders ===============
+async def totalOrders(user):
+    if user["role"] != "seller":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    seller = await sellersCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not seller:
+        raise HTTPException(404,detail="Seller not found")
+    seller_orders = await ordersCollection.count_documents(
+        {"seller_id":seller["_id"]}
+    )
+
+    return jsonable_encoder(
+        {
+            "total":seller_orders
+        },
+        custom_encoder={ObjectId:str}
+    )
+
+# =================== My Earnings ===========
+async def myEarnings(user):
+    if user["role"] != "seller":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    seller = await sellersCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not seller:
+        raise HTTPException(404,detail="Seller not found")
+    total_earnings = await ordersCollection.aggregate([
+        {
+            "$match": {
+                "seller_id": ObjectId(user["_id"]),
+                "status": "Delivered"
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "total": {
+                    "$sum": "$totalAmount"
+                }
+            }
+        }
+    ]).to_list(1) 
+
+    return jsonable_encoder(
+        total_earnings,
         custom_encoder={ObjectId:str}
     )

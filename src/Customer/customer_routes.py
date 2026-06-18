@@ -56,6 +56,15 @@ async def myCarts(user=Depends(isLogin)):
 async def totaOfCart(user=Depends(isLogin)):
     return await customer_controlle.cartTotal(user)
 
+# ----------------- Update Cart Quantity ---------
+@customer_route.put("/increasecartquantity/{productId}")
+async def increaseQuantity(productId:str,user=Depends(isLogin)):
+    return await customer_controlle.increaseQuantity(productId,user)
+# ----------------- Update Decrease Cart Quantity ---------
+@customer_route.put("/decreasecartquantity/{productId}")
+async def decreaseQuantity(productId:str,user=Depends(isLogin)):
+    return await customer_controlle.decreaseQuantity(productId,user)
+
 # ---------- Remove Cart ----------
 @customer_route.put("/removeCart/{productId}")
 async def cartRemove(productId:str,user=Depends(isLogin)):

@@ -6,6 +6,7 @@ A full-featured Grocery Store Backend built with FastAPI and MongoDB. This proje
 
 Authentication
 
+
 * User Registration
 * User Login
 * JWT Authentication
@@ -175,3 +176,6 @@ Live Demo API URL :- https://grocery-kirana-store.onrender.com
 Vivek Anand
 
 Backend Developer | FastAPI | MongoDB | JavaScript
+<img width="1325" height="572" alt="image" src="https://github.com/user-attachments/assets/a7a68450-1299-4303-a931-1a7eebdeb764" />
+<img width="1339" height="578" alt="image" src="https://github.com/user-attachments/assets/1ee6a3ff-3812-4b53-96e4-6c680e4201e5" />
+<img width="1344" height="582" alt="image" src="https://github.com/user-attachments/assets/f628894c-eef3-47b6-8271-3516588d6741" />

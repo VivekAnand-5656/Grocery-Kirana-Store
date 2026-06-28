@@ -51,6 +51,7 @@ async def loginUser(data):
         isvalidPassword = verifyPassword(data.password,seller["password"])
         if not isvalidPassword:
             raise HTTPException(401,detail="Invalid Password")
+        role = seller["role"]
         token = createToekn({
             "_id":str(seller["_id"]),
             "email":seller["email"],
@@ -60,6 +61,7 @@ async def loginUser(data):
         validpassword  = verifyPassword(data.password,customer["password"])
         if not validpassword:
             raise HTTPException(401,detail="Invalid password")
+        role = customer["role"]
         token = createToekn(
             {
                 "_id":str(customer["_id"]),
@@ -70,7 +72,8 @@ async def loginUser(data):
     return jsonable_encoder(
         {
             "msg":"Login Successfully",
-            "token":token
+            "token":token,
+            "role":role
         },
         custom_encoder={ObjectId:str}
     )

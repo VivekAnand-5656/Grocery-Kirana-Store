@@ -433,9 +433,14 @@ async def myEarnings(user):
                 }
             }
         }
-    ]).to_list(1) 
+    ]).to_list(1)
+    totale = 0 
+    for num in total_earnings:
+        totale += num["total"] 
 
     return jsonable_encoder(
-        total_earnings,
+        {
+            "total":totale
+        },
         custom_encoder={ObjectId:str}
     )

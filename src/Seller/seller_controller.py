@@ -1,10 +1,10 @@
 from fastapi import HTTPException, UploadFile
-from src.Config.db import sellersCollection ,productCollection,ordersCollection,customerCollection
+from src.Config.db import sellersCollection ,productCollection,ordersCollection,couponCollection
 from src.Public.publicSchema import CreateUser,LoginUser
-from src.Seller.seller_schema import UpdateStatus
+from src.Seller.seller_schema import UpdateStatus, CouponModel
 from src.Enums.enum import OrderStatus
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi.encoders import jsonable_encoder
 from src.Config.cloudinaryConfig import upload_image
 from typing import Optional
@@ -306,7 +306,7 @@ async def deleteProduct(productId:str,user):
 
     return jsonable_encoder(
         {
-            "msg":"Product Deleted"
+            "msg" : "Product Deleted"
         },
         custom_encoder={ObjectId:str}
     )
@@ -441,6 +441,86 @@ async def myEarnings(user):
     return jsonable_encoder(
         {
             "total":totale
+        },
+        custom_encoder={ObjectId:str}
+    )
+
+# ============ Coupon System ===========
+async def add_coupon(data:CouponModel,user):
+    if user["role"] != "seller":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    seller = await sellersCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not seller:
+        raise HTTPException(404,detail="Seller not found")
+    # expiry_date = datetime.utcnow() + timedelta(days=7)
+    add_new_coupon = {
+        "code":data.code,
+        "type_discount":data.type_discount,
+        "discount":data.discount,
+        "minimum_value":data.minimum_value,
+        "expiry_time":data.expiry_time,
+        "is_Active":data.is_Active,
+        "created_at":datetime.utcnow(),
+        "seller_id":seller["_id"]
+    }
+    await couponCollection.insert_one(add_new_coupon)
+
+    return jsonable_encoder(
+        {
+            "msg":"Coupon Addedd Successfully"
+        },
+        custom_encoder={ObjectId:str}
+    )
+
+# ========== Get Coupons ========
+async def get_coupons(user):
+    if user["role"] != "seller":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    seller = await sellersCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not seller:
+        raise HTTPException(404,detail="Seller not found")
+    
+    my_coupons = await couponCollection.find(
+        {"seller_id":seller["_id"]}
+    ).to_list(length=None)
+
+    if not my_coupons:
+        raise HTTPException(404,detail="Empty Coupons")
+    
+    return jsonable_encoder(
+        my_coupons,
+        custom_encoder={ObjectId:str}
+    )
+
+# ========= Delete Coupon ==========
+async def coupon_delete(couponId:str,user):
+    if user["role"] != "seller":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    seller = await sellersCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not seller:
+        raise HTTPException(404,detail="Seller not found")
+    
+    # --------- Delete ----------
+    coupon = await couponCollection.find_one(
+        {"_id":ObjectId(couponId)}
+    )
+
+    if not coupon["seller_id"] == seller["_id"]:
+        raise HTTPException(401,detail="Unauthorized coupon")
+    
+    await couponCollection.delete_one(
+        {"_id":coupon["_id"]}
+    )
+
+    return jsonable_encoder(
+        {
+            "msg":"Coupon Deleted Successfully"
         },
         custom_encoder={ObjectId:str}
     )

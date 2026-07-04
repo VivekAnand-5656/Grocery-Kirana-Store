@@ -74,3 +74,18 @@ async def cartRemove(productId:str,user=Depends(isLogin)):
 @customer_route.put("/placeorder")
 async def orderplace(user=Depends(isLogin)):
     return await customer_controlle.placeOrder(user)
+
+# ------------------ Rating Product ----------
+@customer_route.put("/rateproduct/{productId}")
+async def product_rate(rate:int,productId:str,user=Depends(isLogin)):
+    return await customer_controlle.rate_product(rate,productId,user)
+
+# ----------- Get Coupon ---------
+@customer_route.get("/getcoupon")
+async def my_Coupons(user=Depends(isLogin)):
+    return await customer_controlle.get_coupons(user)
+
+# ===== Apply Coupon =====
+@customer_route.post("/applycoupon/{code}")
+async def coupon_apply(code:str,user=Depends(isLogin)):
+    return await customer_controlle.apply_coupon(code,user)

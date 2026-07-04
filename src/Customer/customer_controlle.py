@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from src.Config.db import productCollection,sellersCollection,customerCollection,ordersCollection
+from src.Config.db import productCollection,sellersCollection,customerCollection,ordersCollection, couponCollection
 from src.Customer.customer_schema import UpdateProfile
 from bson import ObjectId
 from datetime import datetime
@@ -485,11 +485,14 @@ async def removeCart(productId:str,user):
 async def placeOrder(user):
     if user["role"] != "customer":
         raise HTTPException(403,detail="You are not authorized")
+    
     customer = await customerCollection.find_one(
         {"_id":ObjectId(user["_id"])}
     )
+
     if not customer:
         raise HTTPException(404,detail="Customer not found")
+    
     cart = customer.get("carts",[])
     if not cart:
         raise HTTPException(400,detail="Empty Cart")
@@ -572,3 +575,115 @@ async def placeOrder(user):
         },
         custom_encoder={ObjectId:str}
     )
+
+# =========  Rating ===========
+async def rate_product(rate:int,productId:str,user):
+    if user["role"] != "customer":
+        raise HTTPException(403,detail="You are not authorized")
+    customer = await customerCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not customer:
+        raise HTTPException(404,detail="Customer not found")
+    
+    product = await productCollection.find_one(
+        {"_id":ObjectId(productId)}
+    )
+    if not product:
+        raise HTTPException(404,detail="Product not found")
+    
+    if rate > 5:
+        raise HTTPException(401,detail="Please select under 5")
+    
+    await productCollection.update_one(
+        {"_id":product["_id"]},
+        {
+            "$set":{
+                "rating":rate
+            }
+        }
+    )
+
+    return jsonable_encoder(
+        {
+            "msg":"Rating successfully"
+        },
+        custom_encoder={ObjectId:str}
+    )
+    
+# ========== Get Coupons ========
+async def get_coupons(user):
+    if user["role"] != "customer":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    customer = await customerCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+    if not customer:
+        raise HTTPException(404,detail="Customer not found")
+    
+    my_coupons = await couponCollection.find().to_list(length=None)
+
+    if not my_coupons:
+        raise HTTPException(404,detail="Empty Coupons")
+    
+    return jsonable_encoder(
+        my_coupons,
+        custom_encoder={ObjectId:str}
+    )
+
+# ========= Apply Coupons =====
+async def apply_coupon(code:str,user):
+
+    if user["role"] != "customer":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    
+    customer = await customerCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+
+    if not customer:
+        raise HTTPException(404,detail="Customer not found")
+    
+    carts = customer.get("carts",[])
+    if not carts:
+        raise HTTPException(400,detail="Empty Cart")
+    
+    total_cart_price = 0
+    for cart in customer["carts"]:
+        total_cart_price += (cart["allcarts"]["discount_price"] * cart["quantity"])
+    
+    final_price = 0
+    discount = 0
+    if code:
+        coupon = await couponCollection.find_one(
+            {
+                "code":code,
+                "is_Active":True
+            }
+        )
+        if not coupon:
+            raise HTTPException(400,detail="Invalid Coupon")
+        
+        if coupon["expiry_time"] < datetime.utcnow():
+            raise HTTPException(400,detail="Coupon Expired")
+        
+        if total_cart_price < coupon["minimum_value"]:
+            raise HTTPException(400,detail="Minimum order ammount not reached")
+        
+        if coupon["type_discount"] == "percentage":
+            discount = (total_cart_price * coupon["discount"]) / 100
+        else:
+            discount = coupon["discount"]
+    
+    final_price = total_cart_price - discount
+
+    return jsonable_encoder(
+        {
+            "total_cart": total_cart_price,
+            "discount": discount,
+            "final_price": final_price,
+            "coupon": coupon["code"]
+        },
+        custom_encoder={ObjectId:str}
+    )
+ 

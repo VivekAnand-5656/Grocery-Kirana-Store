@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File,UploadFile, Form
 from src.Seller import seller_controller 
 from src.Dependencies.check import isLogin
-from src.Seller.seller_schema import UpdateStatus
+from src.Seller.seller_schema import UpdateStatus, CouponModel
 
 seller_router = APIRouter(prefix="/sellers",tags=["Seller"])
 
@@ -98,3 +98,18 @@ async def totalorders(user=Depends(isLogin)):
 @seller_router.get("/totalearning")
 async def totalEarning(user=Depends(isLogin)):
     return await seller_controller.myEarnings(user)
+
+# ----------- Coupon Add ----------
+@seller_router.post("/addcoupon")
+async def add_coupon(data:CouponModel,user=Depends(isLogin)):
+    return await seller_controller.add_coupon(data,user)
+
+# ----------- Get Coupon ---------
+@seller_router.get("/getcoupon")
+async def my_Coupons(user=Depends(isLogin)):
+    return await seller_controller.get_coupons(user)
+
+# ---------- Delete Coupon ----------
+@seller_router.delete("/deletecoupon/{couponId}")
+async def delete_coupon(couponId:str,user=Depends(isLogin)):
+    return await seller_controller.coupon_delete(couponId,user)

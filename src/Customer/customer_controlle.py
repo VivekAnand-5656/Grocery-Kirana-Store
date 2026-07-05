@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 from src.Config.db import productCollection,sellersCollection,customerCollection,ordersCollection, couponCollection
-from src.Customer.customer_schema import UpdateProfile
+from src.Customer.customer_schema import AddressModel
 from bson import ObjectId
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
@@ -396,55 +396,7 @@ async def decreaseQuantity(productId:str,user):
         },
         custom_encoder={ObjectId:str}
     )
-
-# =============== Cart Total ==========
-async def cartTotal(user):
-    if user["role"] != "customer":
-        raise HTTPException(403,detail="You are not authorized")
-    customer = await customerCollection.find_one(
-        {"_id":ObjectId(user["_id"])}
-    )
-    if not customer:
-        raise HTTPException(404,detail="Customer not found")
-    
-    carts = await customerCollection.aggregate([
-        {
-            "$match":{
-                "_id":customer["_id"]
-            }
-        },
-        {
-            "$unwind":"$carts"
-        },
-        {
-            "$lookup":{
-                "from":"products",
-                "localField":"carts.product_id",
-                "foreignField":"_id",
-                "as":"allcarts"
-            }
-        },
-        {
-            "$unwind":"$allcarts"
-        },
-        {
-            "$project":{
-                "_id":0,
-                "allcarts":1,
-                "quantity":"$carts.quantity"
-            }
-        }
-    ]).to_list(length=None)
-    if not carts:
-        raise HTTPException(404,detail="Empty Carts")
-    totalCartPrice = 0
-    for cart in carts:
-        totalCartPrice += (cart["allcarts"]["discount_price"] * cart["quantity"])
-    return jsonable_encoder(
-        {"total":totalCartPrice},
-        custom_encoder={ObjectId:str}
-    )
-
+ 
 # =========== Remove From Cart =============
 async def removeCart(productId:str,user):
     if user["role"] != "customer":
@@ -482,7 +434,7 @@ async def removeCart(productId:str,user):
 
 # # ============= Order By Cart ============
  
-async def placeOrder(user):
+async def placeOrder(code:str,user):
     if user["role"] != "customer":
         raise HTTPException(403,detail="You are not authorized")
     
@@ -499,6 +451,7 @@ async def placeOrder(user):
     
     seller_orders={}
 
+    total_cart_price = 0
     for item in customer["carts"]:
         product = await productCollection.find_one(
             {
@@ -507,7 +460,10 @@ async def placeOrder(user):
         )
         if not product:
             continue
+        total_cart_price += (product["discount_price"] * item["quantity"])
+    
         seller_id = ObjectId(product["seller_id"])
+
         if seller_id not in seller_orders:
             seller_orders[seller_id] = []
         seller_orders[seller_id].append({
@@ -517,21 +473,41 @@ async def placeOrder(user):
             "quantity": item["quantity"],
             "status": "Pending"
         })
+    # ----------- Apply Coupon ------------- yaha kuch gadbad hai bhai 
+    final_price = 0
+    discount = 0
+    if code:
+        coupon = await couponCollection.find_one(
+            {
+                "code":code,
+                "is_Active":True
+            }
+        )
+        if not coupon:
+            raise HTTPException(400,detail="Invalid Coupon")
+        
+        if coupon["expiry_time"] < datetime.utcnow():
+            raise HTTPException(400,detail="Coupon Expired")
+        
+        if total_cart_price < coupon["minimum_value"]:
+            raise HTTPException(400,detail="Minimum order ammount not reached")
+        
+        if coupon["type_discount"] == "percentage":
+            discount = (total_cart_price * coupon["discount"]) / 100
+        else:
+            discount = coupon["discount"]
+    final_price = total_cart_price - discount
 
     create_orders = []
-    for seller_id, items in seller_orders.items():
+    for seller_id, items in seller_orders.items(): 
         
-        total_amount = sum(
-            item["discount_price"] * float(item["quantity"])
-            for item in items
-        )
-
         order = {
             "customer_id": customer["_id"],
             "seller_id": ObjectId(seller_id),
             "items": items,
-            "totalAmount": total_amount,
-            "status": "Pending"
+            "totalAmount": final_price,
+            "status": "Pending",
+            "coupon_code":code
         }
 
         result = await ordersCollection.insert_one(order)
@@ -650,7 +626,15 @@ async def apply_coupon(code:str,user):
     
     total_cart_price = 0
     for cart in customer["carts"]:
-        total_cart_price += (cart["allcarts"]["discount_price"] * cart["quantity"])
+        product = await productCollection.find_one(
+            {
+                "_id":ObjectId(cart["product_id"])
+            }
+        ) 
+        if not product:
+            continue
+        total_cart_price += (product["discount_price"] * cart["quantity"])
+         
     
     final_price = 0
     discount = 0
@@ -687,3 +671,40 @@ async def apply_coupon(code:str,user):
         custom_encoder={ObjectId:str}
     )
  
+#  ============ Add Address ===========
+async def add_address(data:AddressModel,user):
+    if user["role"] != "customer":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    
+    customer = await customerCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+
+    if not customer:
+        raise HTTPException(404,detail="Customer not found")
+
+    # ---------- Add address ------
+    address = {
+        "house_no":data.house_no,
+        "area":data.area,
+        "landmark":data.landmark,
+        "city":data.city,
+        "state":data.state,
+        "pincode":data.pincode
+    }
+
+    await customerCollection.update_one(
+        {"_id":customer["_id"]},
+        {
+            "$push":{
+                "addresses":address
+            }
+        }
+    )
+
+    return  jsonable_encoder(
+        {
+            "msg":"Address Updated"
+        },
+        custom_encoder={ObjectId:str}
+    )

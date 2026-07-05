@@ -1,7 +1,7 @@
 from fastapi import APIRouter,Depends
 from src.Dependencies.check import isLogin
 from src.Customer import customer_controlle
-from src.Customer.customer_schema import UpdateProfile
+from src.Customer.customer_schema import UpdateProfile, AddressModel
 from typing import Optional
 
 customer_route = APIRouter(prefix="/customer",tags=["Customer"])
@@ -51,11 +51,6 @@ async def addToCart(productId:str,user=Depends(isLogin)):
 async def myCarts(user=Depends(isLogin)):
     return await customer_controlle.mycarts(user)
 
-# ---------------- Cart Total ------------
-@customer_route.get("/carttotal")
-async def totaOfCart(user=Depends(isLogin)):
-    return await customer_controlle.cartTotal(user)
-
 # ----------------- Update Cart Quantity ---------
 @customer_route.put("/increasecartquantity/{productId}")
 async def increaseQuantity(productId:str,user=Depends(isLogin)):
@@ -71,9 +66,9 @@ async def cartRemove(productId:str,user=Depends(isLogin)):
     return await customer_controlle.removeCart(productId,user)
 
 # --------- Order Place ---------------
-@customer_route.put("/placeorder")
-async def orderplace(user=Depends(isLogin)):
-    return await customer_controlle.placeOrder(user)
+@customer_route.put("/placeorder/{code}")
+async def orderplace(code:str, user=Depends(isLogin)):
+    return await customer_controlle.placeOrder(code, user)
 
 # ------------------ Rating Product ----------
 @customer_route.put("/rateproduct/{productId}")
@@ -89,3 +84,8 @@ async def my_Coupons(user=Depends(isLogin)):
 @customer_route.post("/applycoupon/{code}")
 async def coupon_apply(code:str,user=Depends(isLogin)):
     return await customer_controlle.apply_coupon(code,user)
+
+# ------------ Add Address ------------
+@customer_route.put("/addaddress")
+async def address_add(data:AddressModel,user=Depends(isLogin)):
+    return await customer_controlle.add_address(data,user)

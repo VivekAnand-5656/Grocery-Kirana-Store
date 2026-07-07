@@ -434,7 +434,7 @@ async def removeCart(productId:str,user):
 
 # # ============= Order By Cart ============
  
-async def placeOrder(code:str,user):
+async def placeOrder(addres:AddressModel,code:str,user):
     if user["role"] != "customer":
         raise HTTPException(403,detail="You are not authorized")
     
@@ -445,6 +445,8 @@ async def placeOrder(code:str,user):
     if not customer:
         raise HTTPException(404,detail="Customer not found")
     
+    if not addres:
+        raise HTTPException(404,detail="Please Select Address")
     cart = customer.get("carts",[])
     if not cart:
         raise HTTPException(400,detail="Empty Cart")
@@ -471,7 +473,13 @@ async def placeOrder(code:str,user):
             "productname": product["productname"],
             "discount_price": product["discount_price"],
             "quantity": item["quantity"],
-            "status": "Pending"
+            "status": "Pending", 
+            "house_no": addres.house_no,
+            "area": addres.area,
+            "landmark": addres.landmark,
+            "city": addres.city,
+            "state": addres.state,
+            "pincode": addres.pincode
         })
     # ----------- Apply Coupon ------------- yaha kuch gadbad hai bhai 
     final_price = 0
@@ -507,7 +515,13 @@ async def placeOrder(code:str,user):
             "items": items,
             "totalAmount": final_price,
             "status": "Pending",
-            "coupon_code":code
+            "coupon_code":code,
+            "house_no": addres.house_no,
+            "area": addres.area,
+            "landmark": addres.landmark,
+            "city": addres.city,
+            "state": addres.state,
+            "pincode": addres.pincode
         }
 
         result = await ordersCollection.insert_one(order)
@@ -685,6 +699,7 @@ async def add_address(data:AddressModel,user):
 
     # ---------- Add address ------
     address = {
+        "add_id": ObjectId(),
         "house_no":data.house_no,
         "area":data.area,
         "landmark":data.landmark,
@@ -706,5 +721,51 @@ async def add_address(data:AddressModel,user):
         {
             "msg":"Address Updated"
         },
+        custom_encoder={ObjectId:str}
+    )
+
+# =========== Get Address =======
+async def getAddress(user):
+    if user["role"] != "customer":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    
+    customer = await customerCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+
+    if not customer:
+        raise HTTPException(404,detail="Customer not found")
+
+    all_address = customer["addresses"]
+
+    if not all_address:
+        raise HTTPException(400,detail="Please Choose address")
+    
+    return jsonable_encoder(
+        all_address,
+        custom_encoder={ObjectId:str}
+    )
+
+# =========== Choose Address ======
+async def choose_address(addId:str,user):
+    if user["role"] != "customer":
+        raise HTTPException(403,detail="UnAuthorized User") 
+    
+    customer = await customerCollection.find_one(
+        {"_id":ObjectId(user["_id"])}
+    )
+
+    if not customer:
+        raise HTTPException(404,detail="Customer not found")
+
+    address = {}
+    for addr in customer["addresses"]:
+        if addr["add_id"] == ObjectId(addId):
+            address = addr
+            break
+        print(address)
+    
+    return jsonable_encoder(
+        address,
         custom_encoder={ObjectId:str}
     )

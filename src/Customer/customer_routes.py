@@ -66,9 +66,9 @@ async def cartRemove(productId:str,user=Depends(isLogin)):
     return await customer_controlle.removeCart(productId,user)
 
 # --------- Order Place ---------------
-@customer_route.put("/placeorder/{code}")
-async def orderplace(code:str, user=Depends(isLogin)):
-    return await customer_controlle.placeOrder(code, user)
+@customer_route.put("/placeorder")
+async def orderplace(addres:AddressModel, code:str | None = None, user=Depends(isLogin)):
+    return await customer_controlle.placeOrder(addres, code, user)
 
 # ------------------ Rating Product ----------
 @customer_route.put("/rateproduct/{productId}")
@@ -89,3 +89,13 @@ async def coupon_apply(code:str,user=Depends(isLogin)):
 @customer_route.put("/addaddress")
 async def address_add(data:AddressModel,user=Depends(isLogin)):
     return await customer_controlle.add_address(data,user)
+
+# --------- All Address ----
+@customer_route.get("/alladdress")
+async def all_address(user=Depends(isLogin)):
+    return await customer_controlle.getAddress(user)
+
+# --------- Choose Address ------
+@customer_route.get("/chooseaddress/{addId}")
+async def address_choose(addId:str,user=Depends(isLogin)):
+    return await customer_controlle.choose_address(addId,user)

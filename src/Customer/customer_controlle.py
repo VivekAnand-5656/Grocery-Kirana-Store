@@ -699,6 +699,7 @@ async def add_address(data:AddressModel,user):
 
     # ---------- Add address ------
     address = {
+        "user_id":customer["_id"],
         "add_id": ObjectId(),
         "house_no":data.house_no,
         "area":data.area,
@@ -735,8 +736,7 @@ async def getAddress(user):
 
     if not customer:
         raise HTTPException(404,detail="Customer not found")
-
-    all_address = customer["addresses"]
+    all_address = customer.get("addresses",[])
 
     if not all_address:
         raise HTTPException(400,detail="Please Choose address")
@@ -757,13 +757,14 @@ async def choose_address(addId:str,user):
 
     if not customer:
         raise HTTPException(404,detail="Customer not found")
-
+    allAddress = customer.get("addresses",[])
+    if not allAddress:
+        raise HTTPException(400,detail="Please Select Address")
     address = {}
-    for addr in customer["addresses"]:
+    for addr in allAddress:
         if addr["add_id"] == ObjectId(addId):
             address = addr
-            break
-        print(address)
+            break 
     
     return jsonable_encoder(
         address,
